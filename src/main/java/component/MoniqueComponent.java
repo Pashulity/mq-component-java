@@ -39,23 +39,23 @@ public abstract class MoniqueComponent {
 
     private static final Log log = LogFactory.getLog(MoniqueComponent.class);
 
-    private static final LinkedBlockingQueue<IdentifiedMoniqueError> errorQueue = new LinkedBlockingQueue<>();
+    private final LinkedBlockingQueue<IdentifiedMoniqueError> errorQueue = new LinkedBlockingQueue<>();
 
-    private static final LinkedBlockingQueue<MoniqueTaggedMessage> incoming = new LinkedBlockingQueue<>();
+    private final LinkedBlockingQueue<MoniqueTaggedMessage> incoming = new LinkedBlockingQueue<>();
 
-    private static final LinkedBlockingQueue<MoniqueMessage> outgoing = new LinkedBlockingQueue<>();
+    private final LinkedBlockingQueue<MoniqueMessage> outgoing = new LinkedBlockingQueue<>();
 
-    private static final List<Thread> communicationThreads = new ArrayList<>();
+    private final List<Thread> communicationThreads = new ArrayList<>();
 
     private final CommunicationManager communicationManager = new CommunicationManager();
 
-    private static Config config;
+    private Config config;
 
-    private static volatile Boolean isCommunicationAlive = false;
+    private volatile Boolean isCommunicationAlive = false;
 
-    private static Boolean started = false;
+    private Boolean started = false;
 
-    private static Boolean restartCommunication = false;
+    private Boolean restartCommunication = false;
 
 
     /**
@@ -104,14 +104,14 @@ public abstract class MoniqueComponent {
     /**
      * Push message to outgoing queue
      */
-    protected static void sendMoniqueMessage(MoniqueMessage message) {
+    protected void sendMoniqueMessage(MoniqueMessage message) {
         outgoing.add(message);
     }
 
     /**
      * Push message to error queue
      */
-    protected static void sendErrorMessage(MoniqueError message, String taskId) {
+    protected void sendErrorMessage(MoniqueError message, String taskId) {
         errorQueue.add(new IdentifiedMoniqueError(taskId, message));
     }
 
@@ -120,7 +120,7 @@ public abstract class MoniqueComponent {
      *
      * @throws InterruptedException
      */
-    protected static MoniqueTaggedMessage receiveMessage() throws InterruptedException {
+    protected MoniqueTaggedMessage receiveMessage() throws InterruptedException {
         return incoming.take();
     }
 
@@ -134,11 +134,11 @@ public abstract class MoniqueComponent {
 
 
     private void initTechThread() {
-        TechnicalManager.getInstance().initTechnicalThread();
+        new TechnicalManager().initTechnicalThread();
     }
 
     private void initErrorThread() {
-        ErrorManager.getInstance().initErrorThread();
+        new ErrorManager().initErrorThread();
     }
 
     private void initCommunicationThread() {
@@ -146,7 +146,7 @@ public abstract class MoniqueComponent {
     }
 
     private void initMonitoring() {
-        MonitoringManager.getInstance().initMonitoringThread();
+        new MonitoringManager().initMonitoringThread();
     }
 
     private void listenCommunicationThreadForRestart() {
@@ -237,15 +237,7 @@ public abstract class MoniqueComponent {
         }
     }
 
-    private static class ErrorManager {
-
-        private static class ErrorManagerHolder {
-            static final ErrorManager instance = new ErrorManager();
-        }
-
-        static ErrorManager getInstance() {
-            return ErrorManagerHolder.instance;
-        }
+    private class ErrorManager {
 
         /**
          * Creates new ZMQ context and send error messages to MoniQue scheduler as soon as they appears
@@ -277,15 +269,7 @@ public abstract class MoniqueComponent {
         }
     }
 
-    private static class TechnicalManager {
-
-        private static class TechnicalManagerHolder {
-            static final TechnicalManager instance = new TechnicalManager();
-        }
-
-        static TechnicalManager getInstance() {
-            return TechnicalManagerHolder.instance;
-        }
+    private class TechnicalManager {
 
         /**
          * Creates new ZMQ context and receive technical messages from MoniQue scheduler as soon as they appears
@@ -318,15 +302,7 @@ public abstract class MoniqueComponent {
         }
     }
 
-    private static class MonitoringManager {
-
-        static class MonitoringManagerHolder {
-            static final MonitoringManager instance = new MonitoringManager();
-        }
-
-        static MonitoringManager getInstance() {
-            return MonitoringManagerHolder.instance;
-        }
+    private class MonitoringManager {
 
         /**
          * Creates new ZMQ context and send monitoring messages to MoniQue scheduler by cron
