@@ -18,12 +18,12 @@ public class Config {
     Param param;
 
     @Data
-    class Deploy {
+    static class Deploy {
 
         private Monique monique;
 
         @Data
-        class Monique {
+        static class Monique {
 
             @JsonProperty("scheduler-in")
             private Scheduler in;
@@ -35,7 +35,7 @@ public class Config {
 
 
             @Data
-            class Scheduler {
+            static class Scheduler {
                 private String host;
                 private Integer comport;
                 private Integer techport;
@@ -46,7 +46,7 @@ public class Config {
     }
 
     @Data
-    class Param {
+    static class Param {
         private String name;
         private String creator;
         private Integer frequency;

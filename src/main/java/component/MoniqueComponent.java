@@ -176,8 +176,8 @@ public abstract class MoniqueComponent {
                 try (ZContext context = new ZContext()) {
                     ZMQ.Socket messageSub = context.createSocket(ZMQ.SUB);
                     messageSub.subscribe("");
-                    messageSub.connect("tcp://" + config.getDeploy().getMonique().getOut().getHost() +
-                            ":" + config.getDeploy().getMonique().getOut().getComport());
+                    messageSub.connect("tcp://" + config.deploy.getMonique().getOut().getHost() +
+                            ":" + config.deploy.getMonique().getOut().getComport());
                     while (!Thread.currentThread().isInterrupted()) {
                         ZMsg zMsg = ZMsg.recvMsg(messageSub);
                         ZFrame tagFrame = zMsg.getFirst();
@@ -198,18 +198,18 @@ public abstract class MoniqueComponent {
             communicationThreads.add(new Thread(() -> {
                 try (ZContext context = new ZContext()) {
                     ZMQ.Socket messageSender = context.createSocket(ZMQ.PUSH);
-                    messageSender.connect("tcp://" + config.getDeploy().getMonique().getIn().getHost() +
-                            ":" + config.getDeploy().getMonique().getIn().getComport());
+                    messageSender.connect("tcp://" + config.deploy.getMonique().getIn().getHost() +
+                            ":" + config.deploy.getMonique().getIn().getComport());
                     processIncomingMessage(messageSender);
                 }
             }));
 
-            if (config.getDeploy().getMonique().getController() != null &&
+            if (config.deploy.getMonique().getController() != null &&
                     config.getParam().getPort() != null) {
                 communicationThreads.add(new Thread(() -> {
                     try (ZContext context = new ZContext()) {
                         ZMQ.Socket messageSender = context.createSocket(ZMQ.PULL);
-                        messageSender.connect("tcp://" + config.getDeploy().getMonique().getController().getHost() +
+                        messageSender.connect("tcp://" + config.deploy.getMonique().getController().getHost() +
                                 ":" + config.getParam().getPort());
                         processIncomingMessage(messageSender);
                     }
@@ -254,8 +254,8 @@ public abstract class MoniqueComponent {
             new Thread(() -> {
                 try (ZContext context = new ZContext()) {
                     ZMQ.Socket errSender = context.createSocket(ZMQ.PUSH);
-                    errSender.connect("tcp://" + config.getDeploy().getMonique().getIn().getHost() +
-                            ":" + config.getDeploy().getMonique().getIn().getComport());
+                    errSender.connect("tcp://" + config.deploy.getMonique().getIn().getHost() +
+                            ":" + config.deploy.getMonique().getIn().getComport());
                     while (!Thread.currentThread().isInterrupted()) {
                         try {
                             IdentifiedMoniqueError error = errorQueue.take();
@@ -295,8 +295,8 @@ public abstract class MoniqueComponent {
                 try (ZContext context = new ZContext()) {
                     ZMQ.Socket techSub = context.createSocket(ZMQ.SUB);
                     techSub.subscribe("");
-                    techSub.connect("tcp://" + config.getDeploy().getMonique().getOut().getHost() +
-                            ":" + config.getDeploy().getMonique().getOut().getComport());
+                    techSub.connect("tcp://" + config.deploy.getMonique().getOut().getHost() +
+                            ":" + config.deploy.getMonique().getOut().getComport());
                     while (!Thread.currentThread().isInterrupted()) {
                         try {
                             ZMsg zMsg = ZMsg.recvMsg(techSub);
@@ -335,8 +335,8 @@ public abstract class MoniqueComponent {
             new Thread(() -> {
                 try (ZContext context = new ZContext()) {
                     ZMQ.Socket monitoringSender = context.createSocket(ZMQ.PUSH);
-                    monitoringSender.connect("tcp://" + config.getDeploy().getMonique().getIn().getHost() +
-                            ":" + config.getDeploy().getMonique().getIn().getComport());
+                    monitoringSender.connect("tcp://" + config.deploy.getMonique().getIn().getHost() +
+                            ":" + config.deploy.getMonique().getIn().getComport());
                     while (!Thread.currentThread().isInterrupted()) {
                         try {
                             MoniqueMonitoring monitoring = new MoniqueMonitoring(config.getParam().getName(),
