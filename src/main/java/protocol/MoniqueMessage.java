@@ -5,10 +5,7 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
-import org.apache.commons.codec.digest.DigestUtils;
-import sun.misc.BASE64Encoder;
-
-import static component.Constant.DELIMETER;
+import org.apache.commons.lang3.RandomStringUtils;
 
 
 /**
@@ -16,7 +13,7 @@ import static component.Constant.DELIMETER;
  * It is packed into MessagePack format and unpacked from it
  *
  * @author Pavel Didkovskii
- * */
+ */
 @Getter
 @ToString
 @EqualsAndHashCode
@@ -44,6 +41,7 @@ public class MoniqueMessage {
     private byte[] data;
 
     public MoniqueMessage(String pid, String creator, Integer expiresAt, String spec, String encoding, String type, byte[] data) {
+        this.id = RandomStringUtils.randomAlphanumeric(40);
         this.pid = pid;
         this.creator = creator;
         this.createdAt = (int) (System.currentTimeMillis() % Integer.MAX_VALUE);
@@ -52,13 +50,5 @@ public class MoniqueMessage {
         this.encoding = encoding;
         this.type = type;
         this.data = data;
-        this.id = assignMessageId(this);
     }
-
-    private String assignMessageId(MoniqueMessage message) {
-        return new BASE64Encoder().encode(DigestUtils.sha1(
-                String.join(DELIMETER, message.getCreator(), String.valueOf(message.getCreatedAt()),
-                        message.getSpec())));
-    }
-
 }
