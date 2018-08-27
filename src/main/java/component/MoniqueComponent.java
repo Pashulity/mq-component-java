@@ -89,7 +89,7 @@ public abstract class MoniqueComponent {
      *
      * @return Map of available specifications
      */
-    protected abstract Map<String, String> availableIncomingSpecifications();
+    protected abstract Map<String, List<String>> availableIncomingSpecifications();
 
     /**
      * MoniQue Component subclasses have to implement this method to set up component config
@@ -339,12 +339,13 @@ public abstract class MoniqueComponent {
          *
          * @param specifications - list of available specifications which will be accepted by listener
          */
-        private void initCommunicationThreads(Map<String, String> specifications) {
+        private void initCommunicationThreads(Map<String, List<String>> specifications) {
 
             communicationThreads.add(new Thread(() -> {
                 try (ZContext context = new ZContext()) {
                     ZMQ.Socket messageSub = context.createSocket(ZMQ.SUB);
-                    specifications.forEach((key, value) -> messageSub.subscribe(key + ":" + value));
+                    specifications.forEach((k, v) ->
+                            v.forEach(value -> messageSub.subscribe(value + ":" + k)));
                     messageSub.connect("tcp://" + config.deploy.getMonique().getOut().getHost() +
                             ":" + config.deploy.getMonique().getOut().getComport());
                     while (!Thread.currentThread().isInterrupted()) {
@@ -352,7 +353,7 @@ public abstract class MoniqueComponent {
                         ZFrame tagFrame = zMsg.getFirst();
                         try {
                             String tag = objectFromByteArray(tagFrame.getData(), String.class);
-                            if (specifications.values().contains(getTagPart(tag, TagUtils.TagPart.SPEC))) {
+                            if (specifications.keySet().contains(getTagPart(tag, TagUtils.TagPart.SPEC))) {
                                 ZFrame messageFrame = zMsg.getLast();
                                 incoming.add(new MoniqueTaggedMessage(
                                         tag, objectFromMessagePack(messageFrame.getData(), MoniqueMessage.class)));

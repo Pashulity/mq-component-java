@@ -11,6 +11,7 @@ import protocol.MoniqueTaggedMessage;
 
 import java.io.IOException;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -38,8 +39,8 @@ public class SimpleDataTest {
         MoniqueTaggedMessage incomingMessage;
 
         @Override
-        protected Map<String, String> availableIncomingSpecifications() {
-            return Collections.singletonMap(DATA, SPEC);
+        protected Map<String, List<String>> availableIncomingSpecifications() {
+            return Collections.singletonMap(SPEC, Collections.singletonList(DATA));
         }
 
         @Override
