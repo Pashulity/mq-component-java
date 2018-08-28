@@ -12,11 +12,10 @@ import protocol.MoniqueTaggedMessage;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
-import static component.Constant.DATA;
-import static component.Constant.JSON_TYPE;
-import static component.Constant.NEVER_EXPIRES;
+import static component.Constant.*;
 import static component.Converter.objectToByteArray;
 
 public class SimpleDataTest {
@@ -40,8 +39,8 @@ public class SimpleDataTest {
         MoniqueTaggedMessage incomingMessage;
 
         @Override
-        protected List<String> availableIncomingSpecifications() {
-            return Collections.singletonList(SPEC);
+        protected Map<String, List<String>> availableIncomingSpecifications() {
+            return Collections.singletonMap(SPEC, Collections.singletonList(DATA));
         }
 
         @Override

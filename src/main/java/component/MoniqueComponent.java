@@ -19,12 +19,14 @@ import protocol.MoniqueTaggedMessage;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.LinkedBlockingQueue;
 
 import static component.Constant.*;
 import static component.Converter.*;
-import static component.TagUtils.*;
+import static component.TagUtils.createMessageTag;
+import static component.TagUtils.getTagPart;
 import static protocol.ErrorCodes.TECHNICAL_ERROR;
 
 /**
@@ -39,24 +41,41 @@ public abstract class MoniqueComponent {
 
     private static final Log log = LogFactory.getLog(MoniqueComponent.class);
 
-    private final LinkedBlockingQueue<IdentifiedMoniqueError> errorQueue = new LinkedBlockingQueue<>();
+    private static final LinkedBlockingQueue<IdentifiedMoniqueError> errorQueue = new LinkedBlockingQueue<>();
 
-    private final LinkedBlockingQueue<MoniqueTaggedMessage> incoming = new LinkedBlockingQueue<>();
+    private static final LinkedBlockingQueue<MoniqueTaggedMessage> incoming = new LinkedBlockingQueue<>();
 
-    private final LinkedBlockingQueue<MoniqueMessage> outgoing = new LinkedBlockingQueue<>();
+    private static final LinkedBlockingQueue<MoniqueMessage> outgoing = new LinkedBlockingQueue<>();
 
-    private final List<Thread> communicationThreads = new ArrayList<>();
-
+    private static final List<Thread> communicationThreads = new ArrayList<>();
+    private static Config config;
+    private static volatile Boolean isCommunicationAlive = false;
+    private static Boolean started = false;
+    private static Boolean restartCommunication = false;
     private final CommunicationManager communicationManager = new CommunicationManager();
 
-    private Config config;
+    /**
+     * Push message to outgoing queue
+     */
+    protected static void sendMoniqueMessage(MoniqueMessage message) {
+        outgoing.add(message);
+    }
 
-    private volatile Boolean isCommunicationAlive = false;
+    /**
+     * Push message to error queue
+     */
+    protected static void sendErrorMessage(MoniqueError message, String taskId) {
+        errorQueue.add(new IdentifiedMoniqueError(taskId, message));
+    }
 
-    private Boolean started = false;
-
-    private Boolean restartCommunication = false;
-
+    /**
+     * Receive and remove message from incoming queue and block it if empty
+     *
+     * @throws InterruptedException
+     */
+    protected static MoniqueTaggedMessage receiveMessage() throws InterruptedException {
+        return incoming.take();
+    }
 
     /**
      * MoniQue Component subclasses have to implement this method with all processing logic related to it
@@ -68,9 +87,9 @@ public abstract class MoniqueComponent {
     /**
      * MoniQue Component subclasses have to implement this method to filter incoming messages
      *
-     * @return all available specifications
+     * @return Map of available specifications
      */
-    protected abstract List<String> availableIncomingSpecifications();
+    protected abstract Map<String, List<String>> availableIncomingSpecifications();
 
     /**
      * MoniQue Component subclasses have to implement this method to set up component config
@@ -101,29 +120,6 @@ public abstract class MoniqueComponent {
         }
     }
 
-    /**
-     * Push message to outgoing queue
-     */
-    protected void sendMoniqueMessage(MoniqueMessage message) {
-        outgoing.add(message);
-    }
-
-    /**
-     * Push message to error queue
-     */
-    protected void sendErrorMessage(MoniqueError message, String taskId) {
-        errorQueue.add(new IdentifiedMoniqueError(taskId, message));
-    }
-
-    /**
-     * Receive and remove message from incoming queue and block it if empty
-     *
-     * @throws InterruptedException
-     */
-    protected MoniqueTaggedMessage receiveMessage() throws InterruptedException {
-        return incoming.take();
-    }
-
     private void setConfig() {
         config = createConfiguration();
     }
@@ -134,11 +130,11 @@ public abstract class MoniqueComponent {
 
 
     private void initTechThread() {
-        new TechnicalManager().initTechnicalThread();
+        TechnicalManager.getInstance().initTechnicalThread();
     }
 
     private void initErrorThread() {
-        new ErrorManager().initErrorThread();
+        ErrorManager.getInstance().initErrorThread();
     }
 
     private void initCommunicationThread() {
@@ -146,7 +142,7 @@ public abstract class MoniqueComponent {
     }
 
     private void initMonitoring() {
-        new MonitoringManager().initMonitoringThread();
+        MonitoringManager.getInstance().initMonitoringThread();
     }
 
     private void listenCommunicationThreadForRestart() {
@@ -163,70 +159,11 @@ public abstract class MoniqueComponent {
         });
     }
 
-    private class CommunicationManager {
-
-        /**
-         * Creates new ZMQ context to receive and send messages from/to MoniQue scheduler as soon as they appears
-         *
-         * @param specifications - list of available specifications which will be accepted by listener
-         */
-        private void initCommunicationThreads(List<String> specifications) {
-
-            communicationThreads.add(new Thread(() -> {
-                try (ZContext context = new ZContext()) {
-                    ZMQ.Socket messageSub = context.createSocket(ZMQ.SUB);
-                    messageSub.subscribe("");
-                    messageSub.connect("tcp://" + config.deploy.getMonique().getOut().getHost() +
-                            ":" + config.deploy.getMonique().getOut().getComport());
-                    while (!Thread.currentThread().isInterrupted()) {
-                        ZMsg zMsg = ZMsg.recvMsg(messageSub);
-                        ZFrame tagFrame = zMsg.getFirst();
-                        try {
-                            String tag = objectFromMessagePack(tagFrame.getData(), String.class);
-                            if (specifications.contains(getTagPart(tag, TagPart.SPEC))) {
-                                ZFrame messageFrame = zMsg.getLast();
-                                incoming.add(new MoniqueTaggedMessage(
-                                        tag, objectFromMessagePack(messageFrame.getData(), MoniqueMessage.class)));
-                            }
-                        } catch (Exception ex) {
-                            ex.printStackTrace();
-                        }
-                    }
-                }
-            }));
-
-            communicationThreads.add(new Thread(() -> {
-                try (ZContext context = new ZContext()) {
-                    ZMQ.Socket messageSender = context.createSocket(ZMQ.PUSH);
-                    messageSender.connect("tcp://" + config.deploy.getMonique().getIn().getHost() +
-                            ":" + config.deploy.getMonique().getIn().getComport());
-                    processIncomingMessage(messageSender);
-                }
-            }));
-
-            if (config.deploy.getMonique().getController() != null &&
-                    config.getParam().getPort() != null) {
-                communicationThreads.add(new Thread(() -> {
-                    try (ZContext context = new ZContext()) {
-                        ZMQ.Socket messageSender = context.createSocket(ZMQ.PULL);
-                        messageSender.connect("tcp://" + config.deploy.getMonique().getController().getHost() +
-                                ":" + config.getParam().getPort());
-                        processIncomingMessage(messageSender);
-                    }
-                }));
-            }
-
-            communicationThreads.forEach(Thread::start);
-            log.info("Communcation threads successfully started");
-            isCommunicationAlive = true;
-        }
-    }
-
     private void processIncomingMessage(ZMQ.Socket socket) {
         while (!Thread.currentThread().isInterrupted()) {
             try {
                 MoniqueMessage out = outgoing.take();
-                socket.sendMore(objectToMessagePack(createMessageTag(out)));
+                socket.sendMore(createMessageTag(out));
                 socket.send(objectToMessagePack(out));
             } catch (InterruptedException e) {
                 log.info("Communication thread was interrupted");
@@ -237,7 +174,11 @@ public abstract class MoniqueComponent {
         }
     }
 
-    private class ErrorManager {
+    private static class ErrorManager {
+
+        static ErrorManager getInstance() {
+            return ErrorManagerHolder.instance;
+        }
 
         /**
          * Creates new ZMQ context and send error messages to MoniQue scheduler as soon as they appears
@@ -254,7 +195,7 @@ public abstract class MoniqueComponent {
                             String pid = error.getTaskId() != null ? error.getTaskId() : "";
                             MoniqueMessage message = new MoniqueMessage(pid, UUID.randomUUID().toString(),
                                     NEVER_EXPIRES, ERROR, JSON_TYPE, ERROR, objectToByteArray(error));
-                            errSender.sendMore(objectToMessagePack(createMessageTag(message)));
+                            errSender.sendMore(createMessageTag(message));
                             errSender.send(objectToMessagePack(message));
                         } catch (InterruptedException e) {
                             log.info("Error thread was interrupted");
@@ -267,9 +208,17 @@ public abstract class MoniqueComponent {
             }).start();
             log.info("Error thread successfully started");
         }
+
+        private static class ErrorManagerHolder {
+            static final ErrorManager instance = new ErrorManager();
+        }
     }
 
-    private class TechnicalManager {
+    private static class TechnicalManager {
+
+        static TechnicalManager getInstance() {
+            return TechnicalManagerHolder.instance;
+        }
 
         /**
          * Creates new ZMQ context and receive technical messages from MoniQue scheduler as soon as they appears
@@ -285,7 +234,7 @@ public abstract class MoniqueComponent {
                         try {
                             ZMsg zMsg = ZMsg.recvMsg(techSub);
                             ZFrame tagFrame = zMsg.getFirst();
-                            String tag = objectFromMessagePack(tagFrame.getData(), String.class);
+                            String tag = objectFromByteArray(tagFrame.getData(), String.class);
                             if (CONFIG.equals(TagUtils.getTagPart(tag, TagUtils.TagPart.TYPE)) &&
                                     KILL.equals(TagUtils.getTagPart(tag, TagUtils.TagPart.SPEC))) {
                                 restartCommunication = true;
@@ -300,9 +249,17 @@ public abstract class MoniqueComponent {
             }).start();
             log.info("Technical thread successfully started");
         }
+
+        private static class TechnicalManagerHolder {
+            static final TechnicalManager instance = new TechnicalManager();
+        }
     }
 
-    private class MonitoringManager {
+    private static class MonitoringManager {
+
+        static MonitoringManager getInstance() {
+            return MonitoringManagerHolder.instance;
+        }
 
         /**
          * Creates new ZMQ context and send monitoring messages to MoniQue scheduler by cron
@@ -319,7 +276,7 @@ public abstract class MoniqueComponent {
                                     isCommunicationAlive, "");
                             MoniqueMessage message = new MoniqueMessage("", UUID.randomUUID().toString(),
                                     NEVER_EXPIRES, MONITORING, JSON_TYPE, DATA, Converter.objectToByteArray(monitoring));
-                            monitoringSender.sendMore(objectToMessagePack(createMessageTag(message)));
+                            monitoringSender.sendMore(createMessageTag(message));
                             monitoringSender.send(objectToMessagePack(message));
                             Thread.sleep(config.getParam().getFrequency());
                         } catch (InterruptedException e) {
@@ -333,6 +290,10 @@ public abstract class MoniqueComponent {
                 }
             }).start();
             log.info("Monitoring thread successfully started");
+        }
+
+        static class MonitoringManagerHolder {
+            static final MonitoringManager instance = new MonitoringManager();
         }
     }
 
@@ -368,6 +329,66 @@ public abstract class MoniqueComponent {
             this.syncTime = (int) (System.currentTimeMillis() % Integer.MAX_VALUE);
             this.isAlive = isAlive;
             this.message = message;
+        }
+    }
+
+    private class CommunicationManager {
+
+        /**
+         * Creates new ZMQ context to receive and send messages from/to MoniQue scheduler as soon as they appears
+         *
+         * @param specifications - list of available specifications which will be accepted by listener
+         */
+        private void initCommunicationThreads(Map<String, List<String>> specifications) {
+
+            communicationThreads.add(new Thread(() -> {
+                try (ZContext context = new ZContext()) {
+                    ZMQ.Socket messageSub = context.createSocket(ZMQ.SUB);
+                    specifications.forEach((k, v) ->
+                            v.forEach(value -> messageSub.subscribe(value + ":" + k)));
+                    messageSub.connect("tcp://" + config.deploy.getMonique().getOut().getHost() +
+                            ":" + config.deploy.getMonique().getOut().getComport());
+                    while (!Thread.currentThread().isInterrupted()) {
+                        ZMsg zMsg = ZMsg.recvMsg(messageSub);
+                        ZFrame tagFrame = zMsg.getFirst();
+                        try {
+                            String tag = objectFromByteArray(tagFrame.getData(), String.class);
+                            if (specifications.keySet().contains(getTagPart(tag, TagUtils.TagPart.SPEC))) {
+                                ZFrame messageFrame = zMsg.getLast();
+                                incoming.add(new MoniqueTaggedMessage(
+                                        tag, objectFromMessagePack(messageFrame.getData(), MoniqueMessage.class)));
+                            }
+                        } catch (Exception ex) {
+                            ex.printStackTrace();
+                        }
+                    }
+                }
+            }));
+
+            communicationThreads.add(new Thread(() -> {
+                try (ZContext context = new ZContext()) {
+                    ZMQ.Socket messageSender = context.createSocket(ZMQ.PUSH);
+                    messageSender.connect("tcp://" + config.deploy.getMonique().getIn().getHost() +
+                            ":" + config.deploy.getMonique().getIn().getComport());
+                    processIncomingMessage(messageSender);
+                }
+            }));
+
+            if (config.deploy.getMonique().getController() != null &&
+                    config.getParam().getPort() != null) {
+                communicationThreads.add(new Thread(() -> {
+                    try (ZContext context = new ZContext()) {
+                        ZMQ.Socket messageSender = context.createSocket(ZMQ.PULL);
+                        messageSender.connect("tcp://" + config.deploy.getMonique().getController().getHost() +
+                                ":" + config.getParam().getPort());
+                        processIncomingMessage(messageSender);
+                    }
+                }));
+            }
+
+            communicationThreads.forEach(Thread::start);
+            log.info("Communication threads successfully started");
+            isCommunicationAlive = true;
         }
     }
 }

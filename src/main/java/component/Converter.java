@@ -10,18 +10,26 @@ import org.msgpack.value.Variable;
 import java.io.IOException;
 
 /**
-* Utility class
-* Provides methods to convert different types of data
-*
-* @author Pavel Didkovskii
-*/
+ * Utility class
+ * Provides methods to convert different types of data
+ *
+ * @author Pavel Didkovskii
+ */
 public class Converter {
 
     public static byte[] objectToByteArray(Object o) throws JsonProcessingException {
         return new ObjectMapper().writeValueAsBytes(o);
     }
 
+    /**
+     * @param data - byte array data for deserialization
+     * @return - deserialized object
+     * @throws IOException
+     */
     public static <T> T objectFromByteArray(byte[] data, Class<T> clazz) throws IOException {
+        if (clazz == String.class) {
+            return (T) stringFromByteArray(data);
+        }
         return new ObjectMapper().readValue(data, clazz);
     }
 
@@ -47,6 +55,10 @@ public class Converter {
             return (T) stringFromMessagePack(data);
         }
         return new ObjectMapper(new MessagePackFactory()).readValue(data, clazz);
+    }
+
+    private static String stringFromByteArray(byte[] data) throws IOException {
+        return new String(data, "UTF-8");
     }
 
     private static String stringFromMessagePack(byte[] data) throws IOException {
